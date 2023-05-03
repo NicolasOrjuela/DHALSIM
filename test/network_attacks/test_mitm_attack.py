@@ -86,7 +86,7 @@ def test_setup(os_mock, subprocess_mock, attack, thread_mock, launch_arp_poison_
 
     assert os_mock.system.call_count == 5
     subprocess.Popen.assert_called_with(
-        ['/usr/bin/python2', '-m', 'cpppo.server.enip', '--print', '--address', '192.168.1.4:44818',
+        ['/usr/bin/python3', '-m', 'cpppo.server.enip', '--print', '--address', '192.168.1.4:44818',
          'V_ER2i:1=REAL', 'T2:1=REAL'], shell=False)
     assert attack.update_tags_dict.call_count == 1
     assert attack.run_thread == True
@@ -99,7 +99,7 @@ def test_receive_original_tags(subprocess_mock, attack):
     attack.receive_original_tags()
 
     subprocess.Popen.assert_called_with(
-        ['/usr/bin/python2', '-m', 'cpppo.server.enip.client', '--print', '--address',
+        ['/usr/bin/python3', '-m', 'cpppo.server.enip.client', '--print', '--address',
          '192.168.1.1:44818', 'V_ER2i:1', 'T2:1'], shell=False, stdout=-1)
     assert subprocess_mock.communicate.call_count == 1
 
@@ -122,7 +122,7 @@ def test_update_tags_dict(mocker, attack):
 def test_make_client_cmd(attack):
     cmd = attack.make_client_cmd()
 
-    assert cmd == ['/usr/bin/python2', '-m', 'cpppo.server.enip.client', '--print', '--address',
+    assert cmd == ['/usr/bin/python3', '-m', 'cpppo.server.enip.client', '--print', '--address',
                    '192.168.1.4']
 
 
@@ -131,7 +131,7 @@ def test_cpppo_thread(subprocess_mock, attack):
     attack.cpppo_thread(interrupt_test=True)
 
     subprocess.Popen.assert_called_with(
-        ['/usr/bin/python2', '-m', 'cpppo.server.enip.client', '--print', '--address',
+        ['/usr/bin/python3', '-m', 'cpppo.server.enip.client', '--print', '--address',
          '192.168.1.4'], shell=False)
     assert subprocess_mock.wait.call_count == 1
 
