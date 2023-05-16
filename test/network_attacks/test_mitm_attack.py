@@ -1,11 +1,11 @@
 import subprocess
-import threading
 from pathlib import Path
 
+import fnfqueue
 import pytest
 import yaml
 
-from dhalsim.network_attacks.cppo_server_mitm_attack import SyncedAttack, MitmAttack
+from dhalsim.network_attacks.mitm_attack import SyncedAttack, MiTMAttack
 
 
 @pytest.fixture
@@ -39,13 +39,22 @@ def subprocess_mock(mocker):
 
 
 @pytest.fixture
-def thread_mock(mocker):
-    thread = mocker.Mock()
-    thread.start.return_value = None
-    thread.join.return_value = None
+def fnfqueue_mock(mocker, fnfqueue_bound_mock):
+    queue = mocker.Mock()
+    queue.close.return_value = None
+    queue.bind.return_value = fnfqueue_bound_mock
 
-    mocker.patch("threading.Thread", return_value=thread)
-    return thread
+    mocker.patch("fnfqueue.Connection", return_value=queue)
+    return queue
+
+
+@pytest.fixture
+def fnfqueue_bound_mock(mocker):
+    q = mocker.Mock()
+    q.set_mode.return_value = None
+    q.unbind.return_value = None
+
+    return q
 
 
 @pytest.fixture
@@ -61,12 +70,12 @@ def restore_arp_mock(mocker):
 @pytest.fixture
 def attack(intermediate_yaml_path, yaml_index, mocker):
     #mocker.patch.object(SyncedAttack, 'initialize_db', return_value=None)
-    return MitmAttack(intermediate_yaml_path, yaml_index)
+    return MiTMAttack(intermediate_yaml_path, yaml_index)
 
 
 def test_init(intermediate_yaml_path, yaml_index, os_mock, mocker):
     #mocker.patch.object(SyncedAttack, 'initialize_db', return_value=None)
-    mitm_attack = MitmAttack(intermediate_yaml_path, yaml_index)
+    mitm_attack = MiTMAttack(intermediate_yaml_path, yaml_index)
 
     assert mitm_attack.yaml_index == yaml_index
     with intermediate_yaml_path.open() as yaml_file:
@@ -79,65 +88,18 @@ def test_init(intermediate_yaml_path, yaml_index, os_mock, mocker):
     assert os_mock.system.call_count == 1
 
 
-def test_setup(os_mock, subprocess_mock, attack, thread_mock, launch_arp_poison_mock, mocker):
-    # Mock self.update_tags_dict()
-    mocker.patch.object(MitmAttack, "update_tags_dict", return_value=None)
+def test_setup(os_mock, subprocess_mock, attack, launch_arp_poison_mock, mocker, fnfqueue_mock, fnfqueue_bound_mock):
     attack.setup()
 
     assert os_mock.system.call_count == 5
-    subprocess.Popen.assert_called_with(
-        ['/usr/bin/python3', '-m', 'cpppo.server.enip', '--print', '--address', '192.168.1.4:44818',
-         'V_ER2i:1=REAL', 'T2:1=REAL'], shell=False)
-    assert attack.update_tags_dict.call_count == 1
-    assert attack.run_thread == True
-    assert threading.Thread.call_count == 1
-    assert thread_mock.start.call_count == 1
     assert launch_arp_poison_mock.call_count == 1
-
-
-def test_receive_original_tags(subprocess_mock, attack):
-    attack.receive_original_tags()
-
-    subprocess.Popen.assert_called_with(
-        ['/usr/bin/python3', '-m', 'cpppo.server.enip.client', '--print', '--address',
-         '192.168.1.1:44818', 'V_ER2i:1', 'T2:1'], shell=False, stdout=-1)
-    assert subprocess_mock.communicate.call_count == 1
-
-
-def test_update_tags_dict(mocker, attack):
-    # Mock self.receive_original_tags() as this function is already tested
-    mocker.patch.object(MitmAttack, "receive_original_tags", return_value=None)
-    attack.tags = {
-        "V_ER2i": 1,
-        "T2": 0.1
-    }
-    attack.update_tags_dict()
-
-    assert attack.tags == {
-        "V_ER2i": 0,
-        "T2": 3.1
-    }
-
-
-def test_make_client_cmd(attack):
-    cmd = attack.make_client_cmd()
-
-    assert cmd == ['/usr/bin/python3', '-m', 'cpppo.server.enip.client', '--print', '--address',
-                   '192.168.1.4']
-
-
-def test_cpppo_thread(subprocess_mock, attack):
-    attack.run_thread = True
-    attack.cpppo_thread(interrupt_test=True)
-
-    subprocess.Popen.assert_called_with(
-        ['/usr/bin/python3', '-m', 'cpppo.server.enip.client', '--print', '--address',
-         '192.168.1.4'], shell=False)
-    assert subprocess_mock.wait.call_count == 1
+    assert fnfqueue.Connection.call_count == 1
+    fnfqueue_mock.bind.assert_called_with(1)
+    fnfqueue_bound_mock.set_mode.assert_called_with(fnfqueue.MAX_PAYLOAD, fnfqueue.COPY_PACKET)
 
 
 def test_interrupt_from_state_1(attack, mocker):
-    mocker.patch.object(MitmAttack, 'teardown', return_value=None)
+    mocker.patch.object(MiTMAttack, 'teardown', return_value=None)
     attack.state = 1
     attack.interrupt()
 
@@ -145,19 +107,15 @@ def test_interrupt_from_state_1(attack, mocker):
 
 
 def test_interrupt_from_state_0(attack, mocker):
-    mocker.patch.object(MitmAttack, 'teardown', return_value=None)
+    mocker.patch.object(MiTMAttack, 'teardown', return_value=None)
     attack.state = 0
     attack.interrupt()
 
     assert attack.teardown.call_count == 0
 
-def test_teardown(attack, restore_arp_mock, os_mock, subprocess_mock, thread_mock, mocker):
-    attack.thread = thread_mock
-    attack.server = subprocess_mock
+def test_teardown(attack, restore_arp_mock, os_mock, subprocess_mock, mocker):
     attack.teardown()
 
     assert restore_arp_mock.call_count == 1
     assert os_mock.system.call_count == 4
     assert subprocess_mock.terminate.call_count == 1
-    assert attack.run_thread == False
-    assert thread_mock.join.call_count == 1

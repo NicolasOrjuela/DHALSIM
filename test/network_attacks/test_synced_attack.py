@@ -1,14 +1,24 @@
 import sqlite3
 
+from pathlib import Path
+
 import pytest
 from mock import call
 
 from dhalsim.network_attacks.synced_attack import SyncedAttack, DatabaseError
 from dhalsim.network_attacks.cppo_server_mitm_attack import MitmAttack
 
+@pytest.fixture
+def intermediate_yaml_path():
+    return Path("test/auxilary_testing_files/intermediate_yaml_network_attacks.yaml")
+
 
 @pytest.fixture
-def patched_attack(mocker):
+def yaml_index():
+    return 0
+
+@pytest.fixture
+def patched_attack(intermediate_yaml_path, yaml_index, mocker):
     sleeper = mocker.patch("time.sleep", return_value=None)
     mocker.patch.object(SyncedAttack, "__init__", return_value=None)
     mocker.patch.object(MitmAttack, "__init__", return_value=None)
@@ -18,8 +28,11 @@ def patched_attack(mocker):
     cur_mock = mocker.Mock()
     conn_mock = mocker.Mock()
     logger_mock = mocker.Mock()
-
-    attacker = MitmAttack()
+    
+    #yaml_test_path = (Path(__file__).parent.parent.absolute() / 'auxilary_testing_files' / 'intermediate_yaml_network_attacks.yaml')
+    #print("PRUEBA", yaml_test_path)
+    attacker = MitmAttack(intermediate_yaml_path, yaml_index)
+    print("PRUEBA1", attacker.intermediate_yaml)
     attacker.cur = cur_mock
     attacker.conn = conn_mock
     attacker.logger = logger_mock
