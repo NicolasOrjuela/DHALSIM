@@ -1,6 +1,6 @@
 Testing
 ===========
-The tests are located in the `test` folder and to run any of them simply input the command :
+The tests are located in the :code:`/test` folder and to run any of them simply input the command :
 
 .. prompt:: bash $
 
